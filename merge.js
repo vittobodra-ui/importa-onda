@@ -76,6 +76,27 @@
 
   var COLONNA_A = 'CAR-IT';
 
+  // Colonne del file onda da eliminare (U-Z), con il loro contenuto
+  var SCARTA = ['CODICE FIERA DESTINAZIONE', 'CODICE PAESE DESTINAZIONE', 'CODICE STATO DESTINAZIONE',
+    'REGIONE MACELLO DESTINAZIONE', 'CODICE MACELLO DESTINAZIONE', 'CODICE PASCOLO DESTINAZIONE',
+    'CODICE ASSEGNATO IN PRECEDENZA'];
+
+  // Elimina una colonna spostando a sinistra quelle successive
+  function deleteCol(ws, XLSX, col) {
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    for (var r = rg.s.r; r <= rg.e.r; r++) {
+      for (var c = col; c <= rg.e.c; c++) {
+        var next = ws[addr(XLSX, r, c + 1)];
+        if (next) ws[addr(XLSX, r, c)] = next; else delete ws[addr(XLSX, r, c)];
+      }
+      delete ws[addr(XLSX, r, rg.e.c)];
+    }
+    rg.e.c -= 1;
+    ws['!ref'] = XLSX.utils.encode_range(rg);
+    if (ws['!cols']) ws['!cols'].splice(col, 1);
+    delete ws['!merges'];
+  }
+
   // Sposta tutte le celle del foglio a destra di una colonna (libera la colonna A)
   function shiftRight(ws, XLSX) {
     var rg = XLSX.utils.decode_range(ws['!ref']);
@@ -146,7 +167,16 @@
     ws['!ref'] = XLSX.utils.encode_range({ s: O.range.s, e: { r: Math.max(lastRow, O.headerRow), c: lastCol } });
     if (ws['!autofilter']) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: O.headerRow, c: O.range.s.c }, e: { r: lastRow, c: lastCol } }) };
 
-    var vuote = O.cols.filter(function (col) { return col.name && !usate[col.c]; }).map(function (col) { return col.name; });
+    var vuote = O.cols.filter(function (col) { return col.name && !usate[col.c] && SCARTA.indexOf(col.name) < 0; }).map(function (col) { return col.name; });
+
+    // Elimino le colonne da scartare (da destra verso sinistra per non sballare gli indici)
+    var scartate = [];
+    O.cols.slice().reverse().forEach(function (col) {
+      if (SCARTA.indexOf(col.name) >= 0) { deleteCol(ws, XLSX, col.c); scartate.unshift(col.name); }
+    });
+    if (ws['!autofilter']) delete ws['!autofilter'];
+    O = findHeader(ws, XLSX, 'CODICE CAPO');
+
     var header = O.cols.map(function (col) { return col.name || ''; });
     var preview = rows.map(function (ar, i) {
       return O.cols.map(function (col) {
@@ -160,7 +190,7 @@
         capi: rows.length, sheet: O.name,
         abbinate: map.map(function (m) { return m.label; }).concat(fissi.map(function (f) { return f.label; })),
         costanti: costanti.map(function (k) { return k.label; }),
-        vuote: vuote, header: header, rows: preview
+        vuote: vuote, scartate: scartate, header: header, rows: preview
       }
     };
   }

@@ -85,12 +85,12 @@
         <div class="tablewrap"><table id="tbl"></table></div>
   </div>
 
-  <footer>Colonne copiate dal foglio BOVINI: CODICE CAPO, CODICE_ELETTRONICO, RAZZA CODICE, SESSO, CODICE MADRE, da MOTIVO INGRESSO a CODICE AZIENDA DESTINAZIONE, NUMERO e DATA MODELLO USCITA, INTERVALLO DATE, DATA ESTRAZIONE DATI. Dal foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE. Nella colonna A viene scritto sempre CAR-IT. Le altre colonne del file onda restano vuote.</footer>
+  <footer>Colonne copiate dal foglio BOVINI: CODICE CAPO, CODICE_ELETTRONICO, RAZZA CODICE, SESSO, CODICE MADRE, da MOTIVO INGRESSO a CODICE AZIENDA DESTINAZIONE, NUMERO e DATA MODELLO USCITA, INTERVALLO DATE, DATA ESTRAZIONE DATI. Dal foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE. Nella colonna A viene scritto sempre CAR-IT. Le colonne da CODICE FIERA DESTINAZIONE a CODICE ASSEGNATO IN PRECEDENZA (U-Z) vengono eliminate.</footer>
 </main>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>window.XLSX || document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>')</script>
-<script src="merge.js?v=20261119c"></script>
+<script src="merge.js?v=20261119d"></script>
 <script>
 (function(){
   var anagFile = null, ondeFiles = [];
@@ -138,10 +138,11 @@
 
   function show(r){
     $('out').style.display='block';
-    $('stats').innerHTML=[['Capi copiati',r.capi],['Colonne compilate',r.abbinate.length],['Colonne lasciate vuote',r.vuote.length]]
+    $('stats').innerHTML=[['Capi copiati',r.capi],['Colonne compilate',r.abbinate.length],['Colonne eliminate',(r.scartate||[]).length]]
       .map(function(s){ return '<div class="stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'; }).join('');
     var n=['<p class="note">Il file onda compilato è stato scaricato nella cartella Download (foglio <b>'+esc(r.sheet)+'</b>).</p>'];
     if(r.costanti.length) n.push('<p class="note">Mantenuto dal file onda: '+esc(r.costanti.join(', '))+'.</p>');
+    if(r.scartate && r.scartate.length) n.push('<p class="note">Colonne eliminate dal file onda: '+esc(r.scartate.join(', '))+'.</p>');
     if(r.vuote.length) n.push('<p class="note">Colonne del file onda lasciate vuote (non gialle nell\'anagrafe): '+esc(r.vuote.join(', '))+'.</p>');
     $('notes').innerHTML=n.join('');
     var h='<thead><tr><th></th>'+r.header.map(function(x){ return '<th>'+esc(x)+'</th>'; }).join('')+'</tr></thead><tbody>';
