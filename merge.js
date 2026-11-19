@@ -74,11 +74,29 @@
     return -1;
   }
 
+  var COLONNA_A = 'CAR-IT';
+
+  // Sposta tutte le celle del foglio a destra di una colonna (libera la colonna A)
+  function shiftRight(ws, XLSX) {
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    for (var r = rg.s.r; r <= rg.e.r; r++) {
+      for (var c = rg.e.c; c >= rg.s.c; c--) {
+        var a = addr(XLSX, r, c);
+        if (ws[a]) { ws[addr(XLSX, r, c + 1)] = ws[a]; delete ws[a]; }
+      }
+    }
+    rg.e.c += 1;
+    ws['!ref'] = XLSX.utils.encode_range(rg);
+    if (ws['!cols']) ws['!cols'].unshift({});
+    delete ws['!merges'];
+  }
+
   function anagToOnde(XLSX, anagWb, ondeWb) {
     var A = findSheet(anagWb, XLSX, 'CODICE CAPO', 'BOVINI');
     if (!A) throw new Error('Nel file ANAGRAFE non trovo il foglio BOVINI con la colonna "CODICE CAPO".');
     var O = findSheet(ondeWb, XLSX, 'CODICE CAPO', 'BOVINI');
     if (!O) throw new Error('Nel file ONDE non trovo la riga di intestazione con "CODICE CAPO".');
+    if (O.cols[0].name) { shiftRight(O.ws, XLSX); O = findSheet(ondeWb, XLSX, 'CODICE CAPO', 'BOVINI'); }
     var ATT = findSheet(anagWb, XLSX, 'AZIENDA CODICE', "DATI DELL'ATTIVITA");
 
     // Abbinamento colonne: colonna anagrafe -> colonna onde
@@ -100,17 +118,9 @@
       });
     }
 
-    // Colonna senza intestazione all'inizio del file onde (es. "CAR-IT"): tengo il valore già presente
-    var costanti = [];
-    O.cols.forEach(function (col) {
-      if (col.name || usate[col.c]) return;
-      var vals = {}, sample = null;
-      for (var r = O.headerRow + 1; r <= O.range.e.r; r++) {
-        var c = cloneCell(O.ws[addr(XLSX, r, col.c)]);
-        if (c) { vals[cellText(c)] = true; sample = sample || c; }
-      }
-      if (sample && Object.keys(vals).length === 1) costanti.push({ to: col.c, cell: sample, label: 'colonna ' + XLSX.utils.encode_col(col.c) + ' = ' + cellText(sample) });
-    });
+    // Colonna A: sempre "CAR-IT" su ogni riga compilata
+    var costanti = [{ to: O.range.s.c, cell: { t: 's', v: COLONNA_A, w: COLONNA_A }, label: 'colonna A = ' + COLONNA_A }];
+    usate[O.range.s.c] = true;
 
     // Righe dell'anagrafe nell'ordine del file
     var keyA = colOf(A, 'CODICE CAPO');
