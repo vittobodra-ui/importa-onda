@@ -195,7 +195,22 @@
     };
   }
 
-  var api = { anagToOnde: anagToOnde, GIALLE_BOVINI: GIALLE_BOVINI, GIALLE_ATTIVITA: GIALLE_ATTIVITA };
+  // Intestazione di un file onda vuoto (come l'export BDN; le colonne U-Z vengono poi eliminate)
+  var INTESTAZIONE_ONDA = ['', 'AZIENDA CODICE', 'CODICE FISCALE', 'CODICE SPECIE', 'CODICE CAPO', 'CODICE_ELETTRONICO',
+    'RAZZA CODICE', 'SESSO', 'CODICE MADRE', 'MOTIVO INGRESSO', 'DATA NASCITA', 'DATA INGRESSO',
+    'CODICE AZIENDA PROVENIENZA', 'CODICE FISCALE PROVENIENZA', 'SPECIE AZIENDA PROVENIENZA', 'NUMERO MODELLO INGRESSO',
+    'DATA MODELLO INGRESSO', 'MOTIVO USCITA', 'DATA USCITA', 'CODICE AZIENDA DESTINAZIONE', 'NUMERO MODELLO USCITA',
+    'DATA MODELLO USCITA', 'INTERVALLO DATE', 'DATA ESTRAZIONE DATI'];
+
+  function nuovoOnda(XLSX) {
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet([INTESTAZIONE_ONDA]);
+    ws['!cols'] = INTESTAZIONE_ONDA.map(function (h) { return { wch: Math.max(8, h.length + 2) }; });
+    XLSX.utils.book_append_sheet(wb, ws, 'BOVINI');
+    return wb;
+  }
+
+  var api = { anagToOnde: anagToOnde, nuovoOnda: nuovoOnda, GIALLE_BOVINI: GIALLE_BOVINI, GIALLE_ATTIVITA: GIALLE_ATTIVITA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OndeMerge = api;
 })(this);

@@ -60,8 +60,8 @@
       <input type="file" id="fileA" accept=".xls,.xlsx">
     </label>
     <label class="drop" id="dropO">
-      <h2>2 · File ONDA</h2>
-      <div class="hint">Il file da compilare · trascina qui o clicca</div>
+      <h2>2 · File ONDA <span style="font-weight:400;color:var(--muted)">(facoltativo)</span></h2>
+      <div class="hint">Solo se vuoi riempire un file onda che hai già · altrimenti usa “Crea file onda nuovo”</div>
       <div class="files" id="nameO"></div>
       <input type="file" id="fileO" accept=".xls,.xlsx">
     </label>
@@ -74,7 +74,8 @@
   </div>
 
   <div class="actions">
-    <button id="go" disabled>Compila e scarica</button>
+    <button id="nuovo" disabled>Crea file onda nuovo</button>
+    <button id="go" disabled class="ghost">Compila un file onda esistente</button>
     <button id="reset" class="ghost">Ricomincia</button>
   </div>
   <div class="msg" id="msg"></div>
@@ -90,7 +91,7 @@
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>window.XLSX || document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>')</script>
-<script src="merge.js?v=20261119d"></script>
+<script src="merge.js?v=20261119e"></script>
 <script>
 (function(){
   var anagFile = null, ondeFiles = [];
@@ -113,6 +114,7 @@
     $('dropA').classList.toggle('ok', !!anagFile);
     $('dropO').classList.toggle('ok', ondeFiles.length>0);
     $('go').disabled = !(anagFile && ondeFiles.length);
+    $('nuovo').disabled = !anagFile;
   }
   setupDrop('dropA','fileA','nameA',false,function(f){ anagFile=f[0]||null; refresh(); });
   setupDrop('dropO','fileO','nameO',false,function(f){ ondeFiles=f; refresh(); });
@@ -123,24 +125,29 @@
   function err(t){ var m=$('msg'); m.className='msg err'; m.textContent=t; }
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
-  $('go').onclick=function(){
+  function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function run(useTemplate){
     $('msg').className='msg';
     if(!window.XLSX){ err('Non riesco a caricare la libreria per leggere Excel: controlla la connessione internet e ricarica la pagina.'); return; }
-    Promise.all([readWb(anagFile), readWb(ondeFiles[0])]).then(function(wbs){
-      var res=OndeMerge.anagToOnde(XLSX, wbs[0], wbs[1]);
+    var jobs=[readWb(anagFile)];
+    if(!useTemplate) jobs.push(readWb(ondeFiles[0]));
+    Promise.all(jobs).then(function(wbs){
+      var onda = useTemplate ? OndeMerge.nuovoOnda(XLSX) : wbs[1];
+      var res=OndeMerge.anagToOnde(XLSX, wbs[0], onda);
       var fmt=$('optFmt').value;
-      var base=ondeFiles[0].name.replace(/\.(xlsx?|xls)$/i,'');
-      var d=new Date(), stamp=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      XLSX.writeFile(res.wb, base+'_compilato_'+stamp+'.'+fmt, {bookType: fmt==='xls'?'biff8':'xlsx'});
+      var name = useTemplate ? 'ONDA_'+today() : ondeFiles[0].name.replace(/\.(xlsx?|xls)$/i,'')+'_compilato_'+today();
+      XLSX.writeFile(res.wb, name+'.'+fmt, {bookType: fmt==='xls'?'biff8':'xlsx'});
       show(res.report);
     }).catch(function(e){ console.error(e); err(e && e.message ? e.message : String(e)); });
-  };
+  }
+  $('go').onclick=function(){ run(false); };
+  $('nuovo').onclick=function(){ run(true); };
 
   function show(r){
     $('out').style.display='block';
     $('stats').innerHTML=[['Capi copiati',r.capi],['Colonne compilate',r.abbinate.length],['Colonne eliminate',(r.scartate||[]).length]]
       .map(function(s){ return '<div class="stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'; }).join('');
-    var n=['<p class="note">Il file onda compilato è stato scaricato nella cartella Download (foglio <b>'+esc(r.sheet)+'</b>).</p>'];
+    var n=['<p class="note">Il file onda è stato scaricato nella cartella Download (foglio <b>'+esc(r.sheet)+'</b>).</p>'];
     if(r.costanti.length) n.push('<p class="note">Mantenuto dal file onda: '+esc(r.costanti.join(', '))+'.</p>');
     if(r.scartate && r.scartate.length) n.push('<p class="note">Colonne eliminate dal file onda: '+esc(r.scartate.join(', '))+'.</p>');
     if(r.vuote.length) n.push('<p class="note">Colonne del file onda lasciate vuote (non gialle nell\'anagrafe): '+esc(r.vuote.join(', '))+'.</p>');
