@@ -1,9 +1,9 @@
-/* ANAGRAFE -> ONDE: copia le colonne "gialle" dell'anagrafe nelle colonne corrispondenti del file onde,
+/* ANAGRAFE -> ONDE: copia le colonne "gialle" dell'anagrafe nelle colonne corrispondenti del file onda,
    con i capi nell'ordine dell'anagrafe. Lavora su oggetti cella di SheetJS ({t, v, w, z}). */
 (function (root) {
   'use strict';
 
-  // Colonne gialle del foglio BOVINI dell'anagrafe -> nome della colonna nel file onde
+  // Colonne gialle del foglio BOVINI dell'anagrafe -> nome della colonna nel file onda
   var GIALLE_BOVINI = [
     ['CODICE CAPO', 'CODICE CAPO'],
     ['CODICE_ELETTRONICO', 'CODICE_ELETTRONICO'],
@@ -95,7 +95,7 @@
     var A = findSheet(anagWb, XLSX, 'CODICE CAPO', 'BOVINI');
     if (!A) throw new Error('Nel file ANAGRAFE non trovo il foglio BOVINI con la colonna "CODICE CAPO".');
     var O = findSheet(ondeWb, XLSX, 'CODICE CAPO', 'BOVINI');
-    if (!O) throw new Error('Nel file ONDE non trovo la riga di intestazione con "CODICE CAPO".');
+    if (!O) throw new Error('Nel file ONDA non trovo la riga di intestazione con "CODICE CAPO".');
     if (O.cols[0].name) { shiftRight(O.ws, XLSX); O = findSheet(ondeWb, XLSX, 'CODICE CAPO', 'BOVINI'); }
     var ATT = findSheet(anagWb, XLSX, 'AZIENDA CODICE', "DATI DELL'ATTIVITA");
 
@@ -129,7 +129,7 @@
       if (cellText(A.ws[addr(XLSX, r, keyA)])) rows.push(r);
     }
 
-    // Svuoto le righe dati del file onde e scrivo quelle nuove
+    // Svuoto le righe dati del file onda e scrivo quelle nuove
     var ws = O.ws, lastCol = O.range.e.c;
     for (var rr = O.headerRow + 1; rr <= O.range.e.r; rr++)
       for (var c = O.range.s.c; c <= lastCol; c++) delete ws[addr(XLSX, rr, c)];

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anagrafe → Onde</title>
+<title>Anagrafe → Onda</title>
 <style>
   :root { --bg:#f6f5f1; --card:#fff; --ink:#1d2a24; --muted:#66736c; --line:#dde2dc; --accent:#2f6b4f; --accent-2:#e7f1ea; --warn:#fff4d6; --new:#e2f4e7; }
   * { box-sizing:border-box; }
@@ -49,8 +49,8 @@
 </head>
 <body>
 <main>
-  <h1>Anagrafe → Onde</h1>
-  <p class="sub">Carica il file ANAGRAFE e il file ONDE: i dati delle colonne gialle dell'anagrafe vengono copiati nelle colonne corrispondenti del file onde, con i capi nello stesso ordine dell'anagrafe. Poi scarichi il file onde compilato. Tutto avviene nel tuo browser, i file non vengono inviati da nessuna parte.</p>
+  <h1>Anagrafe → Onda</h1>
+  <p class="sub">Carica il file ANAGRAFE e il file ONDA: i dati delle colonne gialle dell'anagrafe vengono copiati nelle colonne corrispondenti del file onda, con i capi nello stesso ordine dell'anagrafe. Poi scarichi il file onda compilato. Tutto avviene nel tuo browser, i file non vengono inviati da nessuna parte.</p>
 
   <div class="grid">
     <label class="drop" id="dropA">
@@ -60,7 +60,7 @@
       <input type="file" id="fileA" accept=".xls,.xlsx">
     </label>
     <label class="drop" id="dropO">
-      <h2>2 · File ONDE</h2>
+      <h2>2 · File ONDA</h2>
       <div class="hint">Il file da compilare · trascina qui o clicca</div>
       <div class="files" id="nameO"></div>
       <input type="file" id="fileO" accept=".xls,.xlsx">
@@ -85,7 +85,7 @@
         <div class="tablewrap"><table id="tbl"></table></div>
   </div>
 
-  <footer>Colonne copiate dal foglio BOVINI: CODICE CAPO, CODICE_ELETTRONICO, RAZZA CODICE, SESSO, CODICE MADRE, da MOTIVO INGRESSO a CODICE AZIENDA DESTINAZIONE, NUMERO e DATA MODELLO USCITA, INTERVALLO DATE, DATA ESTRAZIONE DATI. Dal foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE. Nella colonna A viene scritto sempre CAR-IT. Le altre colonne del file onde restano vuote.</footer>
+  <footer>Colonne copiate dal foglio BOVINI: CODICE CAPO, CODICE_ELETTRONICO, RAZZA CODICE, SESSO, CODICE MADRE, da MOTIVO INGRESSO a CODICE AZIENDA DESTINAZIONE, NUMERO e DATA MODELLO USCITA, INTERVALLO DATE, DATA ESTRAZIONE DATI. Dal foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE. Nella colonna A viene scritto sempre CAR-IT. Le altre colonne del file onda restano vuote.</footer>
 </main>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -140,9 +140,9 @@
     $('out').style.display='block';
     $('stats').innerHTML=[['Capi copiati',r.capi],['Colonne compilate',r.abbinate.length],['Colonne lasciate vuote',r.vuote.length]]
       .map(function(s){ return '<div class="stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'; }).join('');
-    var n=['<p class="note">Il file onde compilato è stato scaricato nella cartella Download (foglio <b>'+esc(r.sheet)+'</b>).</p>'];
-    if(r.costanti.length) n.push('<p class="note">Mantenuto dal file onde: '+esc(r.costanti.join(', '))+'.</p>');
-    if(r.vuote.length) n.push('<p class="note">Colonne del file onde lasciate vuote (non gialle nell\'anagrafe): '+esc(r.vuote.join(', '))+'.</p>');
+    var n=['<p class="note">Il file onda compilato è stato scaricato nella cartella Download (foglio <b>'+esc(r.sheet)+'</b>).</p>'];
+    if(r.costanti.length) n.push('<p class="note">Mantenuto dal file onda: '+esc(r.costanti.join(', '))+'.</p>');
+    if(r.vuote.length) n.push('<p class="note">Colonne del file onda lasciate vuote (non gialle nell\'anagrafe): '+esc(r.vuote.join(', '))+'.</p>');
     $('notes').innerHTML=n.join('');
     var h='<thead><tr><th></th>'+r.header.map(function(x){ return '<th>'+esc(x)+'</th>'; }).join('')+'</tr></thead><tbody>';
     r.rows.forEach(function(row,i){ h+='<tr><td>'+(i+1)+'</td>'+row.map(function(v){ return '<td>'+esc(v)+'</td>'; }).join('')+'</tr>'; });
