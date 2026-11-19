@@ -1,31 +1,39 @@
-/* Logica di unione ONDE -> ANAGRAFE. Lavora su oggetti cella di SheetJS ({t, v, w, z}). */
+/* ANAGRAFE -> ONDE: copia le colonne "gialle" dell'anagrafe nelle colonne corrispondenti del file onde,
+   con i capi nell'ordine dell'anagrafe. Lavora su oggetti cella di SheetJS ({t, v, w, z}). */
 (function (root) {
   'use strict';
 
-  // Nomi di colonna diversi tra i due file che indicano lo stesso dato
-  var ALIAS = {
-    'NUMERO MODELLO INGRESSO': 'ESTREMI MODELLO INGRESSO',
-    'CODICE PAESE DESTINAZIONE': 'CODICE STATO DESTINAZIONE'
-  };
+  // Colonne gialle del foglio BOVINI dell'anagrafe -> nome della colonna nel file onde
+  var GIALLE_BOVINI = [
+    ['CODICE CAPO', 'CODICE CAPO'],
+    ['CODICE_ELETTRONICO', 'CODICE_ELETTRONICO'],
+    ['RAZZA CODICE', 'RAZZA CODICE'],
+    ['SESSO', 'SESSO'],
+    ['CODICE MADRE', 'CODICE MADRE'],
+    ['MOTIVO INGRESSO', 'MOTIVO INGRESSO'],
+    ['DATA NASCITA', 'DATA NASCITA'],
+    ['DATA INGRESSO', 'DATA INGRESSO'],
+    ['CODICE AZIENDA PROVENIENZA', 'CODICE AZIENDA PROVENIENZA'],
+    ['CODICE FISCALE PROVENIENZA', 'CODICE FISCALE PROVENIENZA'],
+    ['SPECIE AZIENDA PROVENIENZA', 'SPECIE AZIENDA PROVENIENZA'],
+    ['ESTREMI MODELLO INGRESSO', 'NUMERO MODELLO INGRESSO'],
+    ['DATA MODELLO INGRESSO', 'DATA MODELLO INGRESSO'],
+    ['MOTIVO USCITA', 'MOTIVO USCITA'],
+    ['DATA USCITA', 'DATA USCITA'],
+    ['CODICE AZIENDA DESTINAZIONE', 'CODICE AZIENDA DESTINAZIONE'],
+    ['NUMERO MODELLO USCITA', 'NUMERO MODELLO USCITA'],
+    ['DATA MODELLO USCITA', 'DATA MODELLO USCITA'],
+    ['INTERVALLO DATE', 'INTERVALLO DATE'],
+    ['DATA MACELLAZIONE', 'INTERVALLO DATE'], // stessa colonna (AC) nell'export originale della BDN
+    ['DATA ESTRAZIONE DATI', 'DATA ESTRAZIONE DATI']
+  ];
+  // Colonne gialle del foglio DATI DELL'ATTIVITA (stesso valore per tutti i capi)
+  var GIALLE_ATTIVITA = ['AZIENDA CODICE', 'CODICE FISCALE', 'CODICE SPECIE'];
 
-  // Razze note (si arricchisce da sola con le coppie trovate nell'anagrafe)
-  var RAZZE_BASE = {
-    MTT: 'METICCIO / INCROCIO',
-    PMT: 'PIEMONTESE',
-    FRS: 'FRISONA',
-    VPR: 'VALDOSTANA PEZZATA ROSSA',
-    PRO: "PEZZATA ROSSA D'OROPA"
-  };
-
-  // Colonne che non contano per decidere se un capo è "aggiornato"
-  var IGNORA_CONFRONTO = { 'DATA ESTRAZIONE DATI': true };
-
-  function norm(s) {
-    return String(s == null ? '' : s).toUpperCase().replace(/\s+/g, ' ').trim();
-  }
+  function norm(s) { return String(s == null ? '' : s).toUpperCase().replace(/\s+/g, ' ').trim(); }
   function cellText(c) {
     if (!c || c.v == null) return '';
-    if (c.t === 'd') return c.v instanceof Date ? c.v.toISOString().slice(0, 10) : String(c.v);
+    if (c.v instanceof Date) return c.v.toISOString().slice(0, 10);
     return String(c.v).trim();
   }
   function cloneCell(c) {
@@ -35,163 +43,119 @@
     if (c.w != null) n.w = c.w;
     return n;
   }
-  function strCell(s) { return { t: 's', v: s, w: s }; }
+  function addr(XLSX, r, c) { return XLSX.utils.encode_cell({ r: r, c: c }); }
 
-  // Trova il foglio e la riga di intestazione che contiene "CODICE CAPO"
-  function locate(wb, XLSX, preferName) {
-    var names = wb.SheetNames.slice();
-    if (preferName) names.sort(function (a, b) { return (norm(b) === preferName) - (norm(a) === preferName); });
-    for (var i = 0; i < names.length; i++) {
-      var ws = wb.Sheets[names[i]];
-      if (!ws || !ws['!ref']) continue;
-      var rg = XLSX.utils.decode_range(ws['!ref']);
-      for (var r = rg.s.r; r <= Math.min(rg.e.r, rg.s.r + 15); r++) {
-        var cols = [];
-        var found = -1;
-        for (var c = rg.s.c; c <= rg.e.c; c++) {
-          var h = norm(cellText(ws[XLSX.utils.encode_cell({ r: r, c: c })]));
-          cols.push({ c: c, name: ALIAS[h] || h });
-          if (h === 'CODICE CAPO') found = c;
-        }
-        if (found >= 0) return { name: names[i], ws: ws, headerRow: r, cols: cols, keyCol: found, range: rg };
+  // Cerca in un foglio la riga di intestazione che contiene la colonna "chiave"
+  function findHeader(ws, XLSX, key) {
+    if (!ws || !ws['!ref']) return null;
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    for (var r = rg.s.r; r <= Math.min(rg.e.r, rg.s.r + 15); r++) {
+      var cols = [], hit = false;
+      for (var c = rg.s.c; c <= rg.e.c; c++) {
+        var h = norm(cellText(ws[addr(XLSX, r, c)]));
+        cols.push({ c: c, name: h });
+        if (h === key) hit = true;
       }
+      if (hit) return { ws: ws, headerRow: r, cols: cols, range: rg };
     }
     return null;
   }
+  function findSheet(wb, XLSX, key, prefer) {
+    var names = wb.SheetNames.slice();
+    names.sort(function (a, b) { return (norm(b) === prefer) - (norm(a) === prefer); });
+    for (var i = 0; i < names.length; i++) {
+      var h = findHeader(wb.Sheets[names[i]], XLSX, key);
+      if (h) { h.name = names[i]; return h; }
+    }
+    return null;
+  }
+  function colOf(h, name) {
+    for (var i = 0; i < h.cols.length; i++) if (h.cols[i].name === name) return h.cols[i].c;
+    return -1;
+  }
 
-  // Legge le righe dati (array di celle indicizzate per colonna)
-  function readRows(loc, XLSX) {
+  function anagToOnde(XLSX, anagWb, ondeWb) {
+    var A = findSheet(anagWb, XLSX, 'CODICE CAPO', 'BOVINI');
+    if (!A) throw new Error('Nel file ANAGRAFE non trovo il foglio BOVINI con la colonna "CODICE CAPO".');
+    var O = findSheet(ondeWb, XLSX, 'CODICE CAPO', 'BOVINI');
+    if (!O) throw new Error('Nel file ONDE non trovo la riga di intestazione con "CODICE CAPO".');
+    var ATT = findSheet(anagWb, XLSX, 'AZIENDA CODICE', "DATI DELL'ATTIVITA");
+
+    // Abbinamento colonne: colonna anagrafe -> colonna onde
+    var map = [], usate = {};
+    GIALLE_BOVINI.forEach(function (p) {
+      var ca = colOf(A, p[0]), co = colOf(O, p[1]);
+      if (ca >= 0 && co >= 0 && !usate[co]) { map.push({ from: ca, to: co, label: p[0] + (p[0] !== p[1] ? ' → ' + p[1] : '') }); usate[co] = true; }
+    });
+
+    // Valori fissi dal foglio DATI DELL'ATTIVITA (prima riga dati; per CODICE FISCALE la prima colonna con quel nome)
+    var fissi = [];
+    if (ATT) {
+      GIALLE_ATTIVITA.forEach(function (name) {
+        var ca = colOf(ATT, name), co = colOf(O, name);
+        if (ca < 0 || co < 0 || usate[co]) return;
+        var cell = null;
+        for (var r = ATT.headerRow + 1; r <= ATT.range.e.r && !cell; r++) cell = cloneCell(ATT.ws[addr(XLSX, r, ca)]);
+        if (cell) { fissi.push({ to: co, cell: cell, label: name + " (dati dell'attività)" }); usate[co] = true; }
+      });
+    }
+
+    // Colonna senza intestazione all'inizio del file onde (es. "CAR-IT"): tengo il valore già presente
+    var costanti = [];
+    O.cols.forEach(function (col) {
+      if (col.name || usate[col.c]) return;
+      var vals = {}, sample = null;
+      for (var r = O.headerRow + 1; r <= O.range.e.r; r++) {
+        var c = cloneCell(O.ws[addr(XLSX, r, col.c)]);
+        if (c) { vals[cellText(c)] = true; sample = sample || c; }
+      }
+      if (sample && Object.keys(vals).length === 1) costanti.push({ to: col.c, cell: sample, label: 'colonna ' + XLSX.utils.encode_col(col.c) + ' = ' + cellText(sample) });
+    });
+
+    // Righe dell'anagrafe nell'ordine del file
+    var keyA = colOf(A, 'CODICE CAPO');
     var rows = [];
-    for (var r = loc.headerRow + 1; r <= loc.range.e.r; r++) {
-      var key = cellText(loc.ws[XLSX.utils.encode_cell({ r: r, c: loc.keyCol })]);
-      if (!key) continue;
-      var byName = {};
-      loc.cols.forEach(function (col) {
-        if (col.name) byName[col.name] = loc.ws[XLSX.utils.encode_cell({ r: r, c: col.c })] || null;
-      });
-      rows.push({ key: key, cells: byName });
-    }
-    return rows;
-  }
-
-  function parseDate(c) {
-    if (!c || c.v == null) return Infinity;
-    if (c.t === 'n') return c.v; // seriale Excel
-    if (c.v instanceof Date) return c.v.getTime() / 86400000 + 25569;
-    var m = String(c.v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (!m) return Infinity;
-    return Date.UTC(+m[3], +m[2] - 1, +m[1]) / 86400000 + 25569;
-  }
-
-  /*
-   * opts: { sort: bool, fillDefaults: {colName: value} | null, razze: {} }
-   * Restituisce { wb, report }
-   */
-  function merge(XLSX, anagWb, ondeWbs, opts) {
-    opts = opts || {};
-    var dest = locate(anagWb, XLSX, 'BOVINI');
-    if (!dest) throw new Error('Nel file ANAGRAFE non trovo un foglio con la colonna "CODICE CAPO".');
-
-    var destNames = dest.cols.map(function (c) { return c.name; });
-    var existing = readRows(dest, XLSX);
-    var index = {};
-    existing.forEach(function (row, i) { index[row.key] = i; existing[i].status = 'invariato'; });
-
-    // Dizionario razze: base + quanto già presente in anagrafe + extra passati
-    var razze = {};
-    Object.keys(RAZZE_BASE).forEach(function (k) { razze[k] = RAZZE_BASE[k]; });
-    Object.keys(opts.razze || {}).forEach(function (k) { razze[k] = opts.razze[k]; });
-    existing.forEach(function (row) {
-      var cod = cellText(row.cells['RAZZA CODICE']);
-      var den = cellText(row.cells['RAZZA DENOMINAZIONE']);
-      if (cod && den) razze[cod] = den;
-    });
-
-    var report = { nuovi: 0, aggiornati: 0, invariati: 0, totaleOnde: 0, razzeSconosciute: {}, colonneNonUsate: {}, colonneVuote: [] };
-
-    ondeWbs.forEach(function (wb) {
-      var src = locate(wb, XLSX, 'BOVINI');
-      if (!src) throw new Error('In uno dei file ONDE non trovo la colonna "CODICE CAPO".');
-      var common = src.cols.filter(function (c) { return c.name && destNames.indexOf(c.name) >= 0; }).map(function (c) { return c.name; });
-      src.cols.forEach(function (c) { if (c.name && destNames.indexOf(c.name) < 0) report.colonneNonUsate[c.name] = true; });
-      var srcRows = readRows(src, XLSX);
-
-      srcRows.forEach(function (sr) {
-        report.totaleOnde++;
-        if (index.hasOwnProperty(sr.key)) {
-          var row = existing[index[sr.key]];
-          var changed = false;
-          common.forEach(function (name) {
-            if (IGNORA_CONFRONTO[name]) return;
-            var nc = cloneCell(sr.cells[name]);
-            if (!nc) return; // non cancello dati già presenti
-            if (cellText(nc) !== cellText(row.cells[name])) { row.cells[name] = nc; changed = true; }
-          });
-          if (changed) {
-            row.status = row.status === 'nuovo' ? 'nuovo' : 'aggiornato';
-            if (sr.cells['DATA ESTRAZIONE DATI']) row.cells['DATA ESTRAZIONE DATI'] = cloneCell(sr.cells['DATA ESTRAZIONE DATI']);
-          }
-        } else {
-          var cells = {};
-          common.forEach(function (name) { cells[name] = cloneCell(sr.cells[name]); });
-          var cod = cellText(cells['RAZZA CODICE']);
-          if (destNames.indexOf('RAZZA DENOMINAZIONE') >= 0 && cod) {
-            if (razze[cod]) cells['RAZZA DENOMINAZIONE'] = strCell(razze[cod]);
-            else report.razzeSconosciute[cod] = true;
-          }
-          if (opts.fillDefaults) {
-            Object.keys(opts.fillDefaults).forEach(function (k) {
-              if (destNames.indexOf(k) >= 0 && !cells[k] && opts.fillDefaults[k] !== '') cells[k] = strCell(opts.fillDefaults[k]);
-            });
-          }
-          index[sr.key] = existing.length;
-          existing.push({ key: sr.key, cells: cells, status: 'nuovo' });
-        }
-      });
-    });
-
-    existing.forEach(function (r) {
-      if (r.status === 'nuovo') report.nuovi++;
-      else if (r.status === 'aggiornato') report.aggiornati++;
-      else report.invariati++;
-    });
-
-    if (opts.sort !== false) {
-      existing.sort(function (a, b) {
-        var da = parseDate(a.cells['DATA INGRESSO']), db = parseDate(b.cells['DATA INGRESSO']);
-        if (da !== db) return da - db;
-        return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
-      });
+    for (var r = A.headerRow + 1; r <= A.range.e.r; r++) {
+      if (cellText(A.ws[addr(XLSX, r, keyA)])) rows.push(r);
     }
 
-    // Riscrivo il foglio: cancello le vecchie righe dati e scrivo le nuove
-    var ws = dest.ws;
-    for (var r = dest.headerRow + 1; r <= dest.range.e.r; r++) {
-      for (var c = dest.range.s.c; c <= dest.range.e.c; c++) delete ws[XLSX.utils.encode_cell({ r: r, c: c })];
-    }
-    existing.forEach(function (row, i) {
-      var rr = dest.headerRow + 1 + i;
-      dest.cols.forEach(function (col) {
-        var cell = col.name ? row.cells[col.name] : null;
-        if (cell && cell.v != null) ws[XLSX.utils.encode_cell({ r: rr, c: col.c })] = cell;
+    // Svuoto le righe dati del file onde e scrivo quelle nuove
+    var ws = O.ws, lastCol = O.range.e.c;
+    for (var rr = O.headerRow + 1; rr <= O.range.e.r; rr++)
+      for (var c = O.range.s.c; c <= lastCol; c++) delete ws[addr(XLSX, rr, c)];
+
+    rows.forEach(function (ar, i) {
+      var orow = O.headerRow + 1 + i;
+      costanti.concat(fissi).forEach(function (f) { ws[addr(XLSX, orow, f.to)] = cloneCell(f.cell); });
+      map.forEach(function (m) {
+        var cell = cloneCell(A.ws[addr(XLSX, ar, m.from)]);
+        if (cell) ws[addr(XLSX, orow, m.to)] = cell;
       });
     });
-    var lastRow = Math.max(dest.headerRow, dest.headerRow + existing.length);
-    ws['!ref'] = XLSX.utils.encode_range({ s: dest.range.s, e: { r: lastRow, c: dest.range.e.c } });
-    if (ws['!autofilter']) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: dest.headerRow, c: dest.range.s.c }, e: { r: lastRow, c: dest.range.e.c } }) };
+    var lastRow = O.headerRow + rows.length;
+    ws['!ref'] = XLSX.utils.encode_range({ s: O.range.s, e: { r: Math.max(lastRow, O.headerRow), c: lastCol } });
+    if (ws['!autofilter']) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: O.headerRow, c: O.range.s.c }, e: { r: lastRow, c: lastCol } }) };
 
-    report.razzeSconosciute = Object.keys(report.razzeSconosciute);
-    report.colonneNonUsate = Object.keys(report.colonneNonUsate);
-    report.razze = razze;
-    report.sheet = dest.name;
-    report.header = destNames;
-    report.rows = existing.map(function (row) {
-      return { status: row.status, values: destNames.map(function (n) { return n ? (row.cells[n] ? (row.cells[n].w != null ? row.cells[n].w : cellText(row.cells[n])) : '') : ''; }) };
+    var vuote = O.cols.filter(function (col) { return col.name && !usate[col.c]; }).map(function (col) { return col.name; });
+    var header = O.cols.map(function (col) { return col.name || ''; });
+    var preview = rows.map(function (ar, i) {
+      return O.cols.map(function (col) {
+        var cell = ws[addr(XLSX, O.headerRow + 1 + i, col.c)];
+        return cell ? (cell.w != null ? cell.w : cellText(cell)) : '';
+      });
     });
-    return { wb: anagWb, report: report };
+    return {
+      wb: ondeWb,
+      report: {
+        capi: rows.length, sheet: O.name,
+        abbinate: map.map(function (m) { return m.label; }).concat(fissi.map(function (f) { return f.label; })),
+        costanti: costanti.map(function (k) { return k.label; }),
+        vuote: vuote, header: header, rows: preview
+      }
+    };
   }
 
-  var api = { merge: merge, locate: locate, ALIAS: ALIAS, RAZZE_BASE: RAZZE_BASE };
+  var api = { anagToOnde: anagToOnde, GIALLE_BOVINI: GIALLE_BOVINI, GIALLE_ATTIVITA: GIALLE_ATTIVITA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OndeMerge = api;
 })(this);

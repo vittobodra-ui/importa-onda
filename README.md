@@ -1,10 +1,10 @@
-# Importa Onde → Anagrafe
+# Anagrafe → Onde
 
-Pagina web che copia i capi del file ONDE (estrazione BDN) nelle colonne corrispondenti del foglio BOVINI del file ANAGRAFE e fa scaricare il file aggiornato.
+Pagina web che copia i dati delle colonne "gialle" del file ANAGRAFE (BDN) nelle colonne corrispondenti del file ONDE, con i capi nell'ordine dell'anagrafe, e fa scaricare il file onde compilato.
 
 Apri: https://vittobodra-ui.github.io/osteo_vbt/ (cambierà quando rinomini il repository)
 
-- Le colonne vengono abbinate per nome (NUMERO MODELLO INGRESSO → ESTREMI MODELLO INGRESSO, CODICE PAESE → CODICE STATO DESTINAZIONE).
-- Capi nuovi aggiunti, capi già presenti (stesso CODICE CAPO) aggiornati solo nei campi cambiati.
-- RAZZA DENOMINAZIONE compilata dal codice razza.
+- Foglio BOVINI → colonne con lo stesso nome nel file onde (ESTREMI MODELLO INGRESSO → NUMERO MODELLO INGRESSO).
+- Foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE ripetuti su ogni riga.
+- Le colonne non gialle restano vuote.
 - Tutto gira nel browser: nessun dato esce dal computer.
