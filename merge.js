@@ -210,7 +210,97 @@
     return wb;
   }
 
-  var api = { anagToOnde: anagToOnde, nuovoOnda: nuovoOnda, GIALLE_BOVINI: GIALLE_BOVINI, GIALLE_ATTIVITA: GIALLE_ATTIVITA };
+  // ---------- CONFRONTO TRA DUE FILE ----------
+  // Ogni campo: nomi possibili della colonna nei vari file (VET INFO / BDN e gestionale ONDA)
+  var CAMPI = [
+    { id: 'ingresso', label: 'Data ingresso', nomi: ['DATA INGRESSO', 'DATAARRIVO', 'DATA ARRIVO'], data: true },
+    { id: 'nascita', label: 'Data nascita', nomi: ['DATA NASCITA', 'DATANASCITA'], data: true },
+    { id: 'razza', label: 'Razza', nomi: ['RAZZA CODICE', 'CODRAZZA'] },
+    { id: 'sesso', label: 'Sesso', nomi: ['SESSO', 'CODSESSO'] },
+    { id: 'prov', label: 'Azienda provenienza', nomi: ['CODICE AZIENDA PROVENIENZA', 'CODAZPROVENIENZA'] },
+    { id: 'uscita', label: 'Data uscita', nomi: ['DATA USCITA', 'DATAUSCITA'], data: true },
+    { id: 'dest', label: 'Azienda destinazione', nomi: ['CODICE AZIENDA DESTINAZIONE', 'CODAZDESTINAZIONE'] }
+  ];
+  var CHIAVI = ['CODICE CAPO', 'IDENTIFICATIVO', 'CODICE_CAPO', 'MATRICOLA'];
+  var EXTRA = ['NUMLAVORO', 'LOCAZIONE'];
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function dataISO(c, XLSX) {
+    if (!c || c.v == null || c.v === '') return '';
+    if (c.v instanceof Date) return c.v.getFullYear() + '-' + pad(c.v.getMonth() + 1) + '-' + pad(c.v.getDate());
+    if (c.t === 'n') {
+      var d = XLSX.SSF.parse_date_code(c.v);
+      return d ? d.y + '-' + pad(d.m) + '-' + pad(d.d) : String(c.v);
+    }
+    var t = String(c.v).trim(), m;
+    if ((m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/))) return m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]);
+    if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) return m[1] + '-' + m[2] + '-' + m[3];
+    return t;
+  }
+  function mostraData(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); return m ? m[3] + '/' + m[2] + '/' + m[1] : iso; }
+
+  function leggiCapi(wb, XLSX, nomeFile) {
+    var h = null, key = null;
+    for (var i = 0; i < wb.SheetNames.length && !h; i++) {
+      for (var k = 0; k < CHIAVI.length && !h; k++) {
+        var f = findHeader(wb.Sheets[wb.SheetNames[i]], XLSX, CHIAVI[k]);
+        if (f) { h = f; h.name = wb.SheetNames[i]; key = CHIAVI[k]; }
+      }
+    }
+    if (!h) throw new Error('Nel file "' + nomeFile + '" non trovo la colonna con il codice del capo (CODICE CAPO o Identificativo).');
+    var cKey = colOf(h, key), cols = {};
+    CAMPI.concat(EXTRA.map(function (e) { return { id: e, nomi: [e] }; })).forEach(function (f) {
+      for (var j = 0; j < f.nomi.length; j++) { var c = colOf(h, f.nomi[j]); if (c >= 0) { cols[f.id] = c; break; } }
+    });
+    var capi = {}, ordine = [];
+    for (var r = h.headerRow + 1; r <= h.range.e.r; r++) {
+      var cod = cellText(h.ws[addr(XLSX, r, cKey)]).toUpperCase().replace(/\s+/g, '');
+      if (!cod) continue;
+      var rec = { codice: cod, riga: r + 1, valori: {} };
+      Object.keys(cols).forEach(function (id) {
+        var cell = h.ws[addr(XLSX, r, cols[id])];
+        var campo = CAMPI.filter(function (f) { return f.id === id; })[0];
+        rec.valori[id] = campo && campo.data ? dataISO(cell, XLSX) : cellText(cell).toUpperCase();
+      });
+      if (!capi[cod]) ordine.push(cod);
+      capi[cod] = capi[cod] || rec;
+    }
+    return { file: nomeFile, foglio: h.name, capi: capi, ordine: ordine, campi: cols };
+  }
+
+  function confronta(XLSX, wbA, nomeA, wbB, nomeB) {
+    var A = leggiCapi(wbA, XLSX, nomeA), B = leggiCapi(wbB, XLSX, nomeB);
+    function info(rec, src) {
+      var parti = [];
+      if (rec.valori.ingresso) parti.push('ingresso ' + mostraData(rec.valori.ingresso));
+      if (rec.valori.prov) parti.push('da ' + rec.valori.prov);
+      if (rec.valori.razza) parti.push(rec.valori.razza);
+      if (rec.valori.sesso) parti.push(rec.valori.sesso);
+      if (rec.valori.nascita) parti.push('nato ' + mostraData(rec.valori.nascita));
+      if (rec.valori.uscita) parti.push('uscito ' + mostraData(rec.valori.uscita));
+      if (rec.valori.NUMLAVORO) parti.push('n. lavoro ' + rec.valori.NUMLAVORO);
+      if (rec.valori.LOCAZIONE) parti.push('locazione ' + rec.valori.LOCAZIONE);
+      return parti.join(' · ');
+    }
+    var soloA = A.ordine.filter(function (c) { return !B.capi[c]; }).map(function (c) { var r = A.capi[c]; return { codice: c, file: A.file, foglio: A.foglio, riga: r.riga, info: info(r) }; });
+    var soloB = B.ordine.filter(function (c) { return !A.capi[c]; }).map(function (c) { var r = B.capi[c]; return { codice: c, file: B.file, foglio: B.foglio, riga: r.riga, info: info(r) }; });
+    var diversi = [], mancanti = [];
+    A.ordine.forEach(function (c) {
+      var a = A.capi[c], b = B.capi[c];
+      if (!b) return;
+      CAMPI.forEach(function (f) {
+        if (!(f.id in A.campi) || !(f.id in B.campi)) return;
+        var va = a.valori[f.id] || '', vb = b.valori[f.id] || '';
+        if (va === vb) return;
+        var riga = { codice: c, campo: f.label, valA: f.data ? mostraData(va) : va, valB: f.data ? mostraData(vb) : vb, rigaA: a.riga, rigaB: b.riga };
+        (va && vb ? diversi : mancanti).push(riga);
+      });
+    });
+    return { A: { file: A.file, foglio: A.foglio, n: A.ordine.length }, B: { file: B.file, foglio: B.foglio, n: B.ordine.length },
+      soloA: soloA, soloB: soloB, diversi: diversi, mancanti: mancanti };
+  }
+
+  var api = { anagToOnde: anagToOnde, nuovoOnda: nuovoOnda, confronta: confronta, GIALLE_BOVINI: GIALLE_BOVINI, GIALLE_ATTIVITA: GIALLE_ATTIVITA };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OndeMerge = api;
 })(this);

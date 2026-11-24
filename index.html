@@ -44,12 +44,21 @@
   tr.aggiornato td { background:var(--warn); }
   .legend { font-size:12px; color:var(--muted); display:flex; gap:14px; margin-top:6px; }
   .sw { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:4px; border:1px solid var(--line); }
+  .tabs { display:flex; gap:6px; margin:0 0 20px; border-bottom:1px solid var(--line); }
+  .tab { background:transparent; color:var(--muted); border-radius:8px 8px 0 0; padding:10px 16px; border:1px solid transparent; border-bottom:0; margin-bottom:-1px; }
+  .tab.on { color:var(--ink); background:var(--card); border-color:var(--line); }
+  h3 { font-size:16px; margin:18px 0 4px; }
+  details summary { cursor:pointer; font-weight:600; margin-top:16px; }
+  .good { color:var(--accent); font-weight:600; }
   footer { margin-top:30px; color:var(--muted); font-size:12px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Anagrafe → Onda</h1>
+  <div class="tabs"><button class="tab on" data-tab="tabOnda">Crea file onda</button><button class="tab" data-tab="tabConf">Confronta due file</button></div>
+
+  <section id="tabOnda">
   <p class="sub">Carica il file ANAGRAFE e il file ONDA: i dati delle colonne gialle dell'anagrafe vengono copiati nelle colonne corrispondenti del file onda, con i capi nello stesso ordine dell'anagrafe. Poi scarichi il file onda compilato. Tutto avviene nel tuo browser, i file non vengono inviati da nessuna parte.</p>
 
   <div class="grid">
@@ -87,11 +96,27 @@
   </div>
 
   <footer>Colonne copiate dal foglio BOVINI: CODICE CAPO, CODICE_ELETTRONICO, RAZZA CODICE, SESSO, CODICE MADRE, da MOTIVO INGRESSO a CODICE AZIENDA DESTINAZIONE, NUMERO e DATA MODELLO USCITA, INTERVALLO DATE, DATA ESTRAZIONE DATI. Dal foglio DATI DELL'ATTIVITA: AZIENDA CODICE, CODICE FISCALE, CODICE SPECIE. Nella colonna A viene scritto sempre CAR-IT. Le colonne da CODICE FIERA DESTINAZIONE a CODICE ASSEGNATO IN PRECEDENZA (U-Z) vengono eliminate.</footer>
+  </section>
+
+  <section id="tabConf" style="display:none">
+    <p class="sub">Carica due file con l'elenco dei capi (per esempio VET INFO e ONDA): ti dico quali capi ci sono in un file ma non nell'altro, in che riga si trovano, e quali dati sono diversi per i capi presenti in entrambi. I file non vengono inviati da nessuna parte.</p>
+    <div class="grid">
+      <label class="drop" id="dropC1"><h2>File 1</h2><div class="hint">es. VET INFO · trascina qui o clicca</div><div class="files" id="nameC1"></div><input type="file" id="fileC1" accept=".xls,.xlsx,.csv"></label>
+      <label class="drop" id="dropC2"><h2>File 2</h2><div class="hint">es. ONDA · trascina qui o clicca</div><div class="files" id="nameC2"></div><input type="file" id="fileC2" accept=".xls,.xlsx,.csv"></label>
+    </div>
+    <div class="actions">
+      <button id="conf" disabled>Confronta</button>
+      <button id="confXls" class="ghost" style="display:none">Scarica le differenze (.xlsx)</button>
+    </div>
+    <div class="msg" id="msgC"></div>
+    <div class="card" id="outC" style="display:none"></div>
+    <footer>Il capo viene riconosciuto dalla colonna CODICE CAPO o Identificativo. Dati confrontati: data ingresso/arrivo, data nascita, razza, sesso, azienda di provenienza, data uscita, azienda di destinazione (solo quelli presenti in tutti e due i file). Il numero di riga è quello che vedi in Excel.</footer>
+  </section>
 </main>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>window.XLSX || document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>')</script>
-<script src="merge.js?v=20261119e"></script>
+<script src="merge.js?v=20261124a"></script>
 <script>
 (function(){
   var anagFile = null, ondeFiles = [];
@@ -157,6 +182,59 @@
     $('tbl').innerHTML=h+'</tbody>';
     $('out').scrollIntoView({behavior:'smooth'});
   }
+
+  // ---- schede ----
+  [].forEach.call(document.querySelectorAll('.tab'),function(b){ b.onclick=function(){
+    [].forEach.call(document.querySelectorAll('.tab'),function(x){ x.classList.toggle('on',x===b); $(x.dataset.tab).style.display = x===b ? '' : 'none'; });
+  }; });
+
+  // ---- confronto ----
+  var c1=null, c2=null, lastConf=null;
+  function refreshC(){
+    $('nameC1').textContent=c1?c1.name:''; $('nameC2').textContent=c2?c2.name:'';
+    $('dropC1').classList.toggle('ok',!!c1); $('dropC2').classList.toggle('ok',!!c2);
+    $('conf').disabled=!(c1&&c2);
+  }
+  setupDrop('dropC1','fileC1','nameC1',false,function(f){ c1=f[0]||null; refreshC(); });
+  setupDrop('dropC2','fileC2','nameC2',false,function(f){ c2=f[0]||null; refreshC(); });
+  function readRaw(file){ return file.arrayBuffer().then(function(buf){ return XLSX.read(buf,{type:'array',cellNF:true}); }); }
+  function table(head, rows){
+    return '<div class="tablewrap"><table><thead><tr>'+head.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('')+'</tr></thead><tbody>'+
+      rows.map(function(r){ return '<tr>'+r.map(function(v){ return '<td>'+esc(v)+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table></div>';
+  }
+  $('conf').onclick=function(){
+    $('msgC').className='msg';
+    if(!window.XLSX){ $('msgC').className='msg err'; $('msgC').textContent='Non riesco a caricare la libreria per leggere Excel: controlla la connessione e ricarica la pagina.'; return; }
+    Promise.all([readRaw(c1),readRaw(c2)]).then(function(w){
+      var r=OndeMerge.confronta(XLSX,w[0],c1.name,w[1],c2.name); lastConf=r;
+      var h='<div class="stats">'+[[r.A.n,'Capi in '+r.A.file],[r.B.n,'Capi in '+r.B.file],[r.soloA.length+r.soloB.length,'Capi di differenza'],[r.diversi.length,'Dati diversi']]
+        .map(function(x){ return '<div class="stat"><b>'+x[0]+'</b><span>'+esc(x[1])+'</span></div>'; }).join('')+'</div>';
+      function solo(list, dove, manca){
+        h+='<h3>Solo in '+esc(dove)+' ('+list.length+')</h3>';
+        if(!list.length){ h+='<p class="note good">Nessuno: tutti i capi di questo file ci sono anche in '+esc(manca)+'.</p>'; return; }
+        h+='<p class="note">Questi capi sono in '+esc(dove)+' ma non in '+esc(manca)+'.</p>'+table(['Codice capo','Riga','Foglio','Dati'],list.map(function(x){ return [x.codice,x.riga,x.foglio,x.info]; }));
+      }
+      solo(r.soloA,r.A.file,r.B.file); solo(r.soloB,r.B.file,r.A.file);
+      h+='<h3>Dati diversi nei capi presenti in entrambi ('+r.diversi.length+')</h3>';
+      h+= r.diversi.length ? table(['Codice capo','Dato',r.A.file,'Riga',r.B.file,'Riga'],r.diversi.map(function(x){ return [x.codice,x.campo,x.valA,x.rigaA,x.valB,x.rigaB]; })) : '<p class="note good">Nessuno.</p>';
+      if(r.mancanti.length){
+        h+='<details><summary>Dati presenti in un file e vuoti nell\'altro ('+r.mancanti.length+')</summary>'+
+          table(['Codice capo','Dato',r.A.file,'Riga',r.B.file,'Riga'],r.mancanti.map(function(x){ return [x.codice,x.campo,x.valA||'(vuoto)',x.rigaA,x.valB||'(vuoto)',x.rigaB]; }))+'</details>';
+      }
+      $('outC').innerHTML=h; $('outC').style.display='block'; $('confXls').style.display='';
+      $('outC').scrollIntoView({behavior:'smooth'});
+    }).catch(function(e){ console.error(e); $('msgC').className='msg err'; $('msgC').textContent=e&&e.message?e.message:String(e); });
+  };
+  $('confXls').onclick=function(){
+    var r=lastConf; if(!r) return;
+    var wb=XLSX.utils.book_new();
+    var solo=[['Codice capo','Si trova solo in','Foglio','Riga','Dati']].concat(r.soloA.concat(r.soloB).map(function(x){ return [x.codice,x.file,x.foglio,x.riga,x.info]; }));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(solo),'Capi di differenza');
+    var head=['Codice capo','Dato',r.A.file,'Riga '+r.A.file,r.B.file,'Riga '+r.B.file];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head].concat(r.diversi.map(function(x){ return [x.codice,x.campo,x.valA,x.rigaA,x.valB,x.rigaB]; }))),'Dati diversi');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head].concat(r.mancanti.map(function(x){ return [x.codice,x.campo,x.valA,x.rigaA,x.valB,x.rigaB]; }))),'Dati vuoti');
+    XLSX.writeFile(wb,'DIFFERENZE_'+today()+'.xlsx');
+  };
 
   $('reset').onclick=function(){ anagFile=null; ondeFiles=[]; $('fileA').value=''; $('fileO').value=''; $('out').style.display='none'; $('msg').className='msg'; refresh(); };
 })();
